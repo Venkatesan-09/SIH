@@ -1,0 +1,40 @@
+version: '3.9'
+
+services:
+  # ── Express API (production container) ───────────────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: skilltwin_api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      AI_SERVICE_URL: http://ai:8000
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      IGOT_PROVIDER: ${IGOT_PROVIDER:-mock}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-15}
+      NODE_ENV: production
+      PORT: 4000
+    ports:
+      - '4000:4000'
+
+  # ── FastAPI AI Service ────────────────────────────────────────────────────────
+  ai:
+    build:
+      context: ./apps/ai
+      dockerfile: Dockerfile
+    container_name: skilltwin_ai
+    restart: unless-stopped
+    environment:
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AI_PORT: 8000
+    ports:
+      - '8000:8000'
+
+# NOTE: Database is MongoDB Atlas (cloud) — no local postgres container needed

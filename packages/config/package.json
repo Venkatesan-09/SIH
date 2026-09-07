@@ -1,0 +1,13 @@
+{
+  "name": "@skilltwin/config",
+  "version": "1.0.0",
+  "description": "Shared ESLint and TypeScript configuration bases",
+  "main": "index.js",
+  "private": true,
+  "files": [
+    "eslint-base.js",
+    "tsconfig.base.json",
+    "tsconfig.react.json",
+    "tsconfig.node.json"
+  ]
+}

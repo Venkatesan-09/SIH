@@ -1,0 +1,410 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// SkillTwin Prisma Schema — MongoDB Edition
+// Switched from PostgreSQL to MongoDB Atlas (free tier)
+// IMPLEMENTATION DECISION: MongoDB provider — @id uses @map("_id") String @default(auto()) @db.ObjectId
+// ─────────────────────────────────────────────────────────────────────────────
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+enum Role {
+  EMPLOYEE
+  ADMIN
+  TRAINER
+}
+
+enum GapPriority {
+  LOW
+  MODERATE
+  HIGH
+  CRITICAL
+}
+
+enum EnrollmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum CourseProvider {
+  IGOT
+  INTERNAL
+  MOCK
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum QuestionDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  REGISTER
+  ADD_EMPLOYEE
+  DEPLOY_INTERVENTION
+  DOCUMENT_UPLOAD
+  QUIZ_GENERATED
+  QUIZ_PROMOTED
+  EXPORT_REPORT
+  SETTINGS_CHANGED
+  PASSWORD_CHANGED
+}
+
+// ─── Users & Org Structure ────────────────────────────────────────────────────
+
+model User {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  email          String   @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  role           Role     @default(EMPLOYEE)
+  departmentId   String?  @db.ObjectId
+  jobRoleId      String?  @db.ObjectId
+  yearsOfService       Int?
+  highestQualification String?
+  specialization       String?
+  onboardingStatus     String   @default("PROFILE_REQUIRED")
+  profileCompleted     Boolean  @default(false)
+  roleCompleted        Boolean  @default(false)
+  assessmentCompleted  Boolean  @default(false)
+  skillTwinGenerated   Boolean  @default(false)
+  isDemo               Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  department      Department?         @relation(fields: [departmentId], references: [id])
+  jobRole         JobRole?            @relation(fields: [jobRoleId], references: [id])
+  skillScores     SkillScore[]
+  skillGaps       SkillGap[]
+  attempts        AssessmentAttempt[]
+  enrollments     Enrollment[]
+  progresses      Progress[]
+  documents       Document[]
+  recommendations Recommendation[]
+  auditLogs       AuditLog[]
+  learningPaths   LearningPath[]
+  preferences     UserPreferences?
+}
+
+model UserPreferences {
+  id                   String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId               String  @unique @db.ObjectId
+  emailNotifications   Boolean @default(true)
+  pushNotifications    Boolean @default(true)
+  weeklyDigest         Boolean @default(true)
+  assessmentReminders  Boolean @default(true)
+  twoFactorEnabled     Boolean @default(false)
+  dataSharing          Boolean @default(false)
+  personalizationLevel Int     @default(2)
+  predictiveModeling   Boolean @default(true)
+  theme                String  @default("light")
+  language             String  @default("en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Department {
+  id       String    @id @default(auto()) @map("_id") @db.ObjectId
+  name     String    @unique
+  users    User[]
+  jobRoles JobRole[]
+}
+
+model JobRole {
+  id               String           @id @default(auto()) @map("_id") @db.ObjectId
+  title            String
+  departmentId     String?          @db.ObjectId
+  department       Department?      @relation(fields: [departmentId], references: [id])
+  users            User[]
+  roleCompetencies RoleCompetency[]
+}
+
+// ─── Competency Catalogue ─────────────────────────────────────────────────────
+
+model Competency {
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  name        String  @unique
+  cluster     String
+  description String?
+
+  roleCompetencies   RoleCompetency[]
+  skillScores        SkillScore[]
+  skillGaps          SkillGap[]
+  courseSkills       CourseSkill[]
+  assessments        Assessment[]
+  questions          Question[]
+  generatedQuestions GeneratedQuestion[]
+  recommendations    Recommendation[]
+}
+
+model RoleCompetency {
+  id            String @id @default(auto()) @map("_id") @db.ObjectId
+  jobRoleId     String @db.ObjectId
+  competencyId  String @db.ObjectId
+  requiredScore Int
+  importance    Int    @default(50)
+
+  jobRole    JobRole    @relation(fields: [jobRoleId], references: [id])
+  competency Competency @relation(fields: [competencyId], references: [id])
+}
+
+// ─── Competency Scoring ───────────────────────────────────────────────────────
+
+model SkillScore {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId              String    @db.ObjectId
+  competencyId        String    @db.ObjectId
+  assessmentComponent Float     @default(0)
+  selfComponent       Float     @default(0)
+  experienceComponent Float     @default(0)
+  trainingComponent   Float     @default(0)
+  currentScore        Float     @default(0)
+  trend               Float     @default(0)
+  lastAssessedAt      DateTime?
+  updatedAt           DateTime  @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competencyId], references: [id])
+}
+
+// ─── Skill Gaps ───────────────────────────────────────────────────────────────
+
+model SkillGap {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String      @db.ObjectId
+  competencyId  String      @db.ObjectId
+  currentScore  Float
+  requiredScore Float
+  gapPct        Float
+  priorityScore Int
+  priorityBand  GapPriority
+  computedAt    DateTime    @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competencyId], references: [id])
+}
+
+// ─── Assessments ─────────────────────────────────────────────────────────────
+
+model Assessment {
+  id            String             @id @default(auto()) @map("_id") @db.ObjectId
+  title         String
+  description   String?
+  competencyId  String?            @db.ObjectId
+  difficulty    QuestionDifficulty @default(INTERMEDIATE)
+  durationMins  Int                @default(30)
+  isAiGenerated Boolean            @default(false)
+  createdAt     DateTime           @default(now())
+
+  competency Competency?         @relation(fields: [competencyId], references: [id])
+  questions  Question[]
+  attempts   AssessmentAttempt[]
+}
+
+model Question {
+  id           String             @id @default(auto()) @map("_id") @db.ObjectId
+  assessmentId String             @db.ObjectId
+  competencyId String?            @db.ObjectId
+  prompt       String
+  options      String[]
+  correctIndex Int
+  explanation  String?
+  difficulty   QuestionDifficulty @default(INTERMEDIATE)
+  order        Int                @default(0)
+
+  assessment Assessment  @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  competency Competency? @relation(fields: [competencyId], references: [id])
+  answers    Answer[]
+}
+
+model AssessmentAttempt {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String    @db.ObjectId
+  assessmentId String    @db.ObjectId
+  startedAt    DateTime  @default(now())
+  submittedAt  DateTime?
+  scorePct     Float?
+  correctCount Int?
+  totalCount   Int?
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assessment Assessment @relation(fields: [assessmentId], references: [id])
+  answers    Answer[]
+}
+
+model Answer {
+  id            String  @id @default(auto()) @map("_id") @db.ObjectId
+  attemptId     String  @db.ObjectId
+  questionId    String  @db.ObjectId
+  selectedIndex Int
+  isCorrect     Boolean
+
+  attempt  AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question          @relation(fields: [questionId], references: [id])
+}
+
+// ─── Courses & Learning Paths ─────────────────────────────────────────────────
+
+model Course {
+  id                   String             @id @default(auto()) @map("_id") @db.ObjectId
+  title                String
+  description          String?
+  provider             CourseProvider     @default(INTERNAL)
+  providerRef          String?
+  difficulty           QuestionDifficulty @default(INTERMEDIATE)
+  durationHrs          Float?
+  url                  String?
+  rating               Float?
+  syllabus             Json?
+  prerequisiteCourseId String?            @db.ObjectId
+  createdAt            DateTime           @default(now())
+
+  courseSkills      CourseSkill[]
+  learningPathItems LearningPathItem[]
+  enrollments       Enrollment[]
+  progresses        Progress[]
+}
+
+model CourseSkill {
+  id           String @id @default(auto()) @map("_id") @db.ObjectId
+  courseId     String @db.ObjectId
+  competencyId String @db.ObjectId
+  weight       Int    @default(50)
+
+  course     Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competencyId], references: [id])
+}
+
+model LearningPath {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  jobRoleId String?  @db.ObjectId
+  title     String
+  rationale String?
+  createdAt DateTime @default(now())
+
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items LearningPathItem[]
+}
+
+model LearningPathItem {
+  id             String           @id @default(auto()) @map("_id") @db.ObjectId
+  learningPathId String           @db.ObjectId
+  courseId       String           @db.ObjectId
+  order          Int
+  status         EnrollmentStatus @default(NOT_STARTED)
+
+  learningPath LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  course       Course       @relation(fields: [courseId], references: [id])
+}
+
+model Enrollment {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String           @db.ObjectId
+  courseId    String           @db.ObjectId
+  status      EnrollmentStatus @default(NOT_STARTED)
+  enrolledAt  DateTime         @default(now())
+  completedAt DateTime?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id])
+}
+
+model Progress {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  courseId    String?  @db.ObjectId
+  pct         Float    @default(0)
+  hoursLogged Float    @default(0)
+  updatedAt   DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course? @relation(fields: [courseId], references: [id])
+}
+
+// ─── Document Processing / AI Quiz Pipeline ───────────────────────────────────
+
+model Document {
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String         @db.ObjectId
+  fileName      String
+  fileType      String
+  fileSizeBytes Int
+  status        DocumentStatus @default(UPLOADED)
+  extractedText String?
+  uploadedAt    DateTime       @default(now())
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quizzes GeneratedQuiz[]
+}
+
+model GeneratedQuiz {
+  id                     String   @id @default(auto()) @map("_id") @db.ObjectId
+  documentId             String   @db.ObjectId
+  createdAt              DateTime @default(now())
+  promotedToAssessmentId String?  @db.ObjectId
+
+  document  Document            @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  questions GeneratedQuestion[]
+}
+
+model GeneratedQuestion {
+  id           String             @id @default(auto()) @map("_id") @db.ObjectId
+  quizId       String             @db.ObjectId
+  competencyId String?            @db.ObjectId
+  prompt       String
+  options      String[]
+  correctIndex Int
+  explanation  String
+  difficulty   QuestionDifficulty @default(INTERMEDIATE)
+  sourceRef    String?
+  confidence   Float
+  validated    Boolean            @default(false)
+
+  quiz       GeneratedQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  competency Competency?   @relation(fields: [competencyId], references: [id])
+}
+
+// ─── AI Recommendations ───────────────────────────────────────────────────────
+
+model Recommendation {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String   @db.ObjectId
+  competencyId String?  @db.ObjectId
+  message      String
+  kind         String
+  createdAt    DateTime @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competency Competency? @relation(fields: [competencyId], references: [id])
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id        String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String?     @db.ObjectId
+  action    AuditAction
+  meta      Json?
+  ipAddress String?
+  createdAt DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}

@@ -1,0 +1,65 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Environment files — NEVER commit secrets
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Database
+*.sqlite
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Python (apps/ai)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+apps/ai/.venv/
+apps/ai/venv/
+apps/ai/.pytest_cache/
+apps/ai/*.egg-info/
+apps/ai/dist/
+
+# Uploads (local dev only)
+apps/api/uploads/
+
+# Test coverage
+coverage/
+.nyc_output/
+htmlcov/
+
+# Prisma
+prisma/migrations/dev.db
+
+# Playwright
+test-results/
+playwright-report/
